@@ -190,23 +190,68 @@ object \&/ {
   case class That[A, B](bb: B) extends (A \&/ B)
   case class Both[A, B](aa: A, bb: B) extends (A \&/ B)
 
-    // @annotation.tailrec
-  final def loopThis[A, B, X](d: A \&/ B, left: A => X, right: B => X \/ (A \&/ B)): X =
-    d match {
-      case This(a) =>
-        ???
-      case That(b) =>
-        ???
-      case Both(a, b) =>
-        ???
+  def alignStream[A, B](a: EphemeralStream[A], b: EphemeralStream[B]): EphemeralStream[A \&/ B] =
+    if(a.isEmpty)
+      b.map(That(_))
+    else if(b.isEmpty)
+      a.map(This(_))
+    else
+      EphemeralStream.cons(Both(a.head(), b.head()), alignStream(a.tail(), b.tail()))
 
-/*
-      case -\/(a) => left(a)
-      case \/-(b) => right(b) match {
-        case -\/(x) => x
-        case \/-(q) => loopRight(q, left, right)
-      }
-      */
+  def alignList[A, B](a: List[A], b: List[B]): List[A \&/ B] =
+    a match {
+      case Nil =>
+        b.map(That[A, B](_))
+      case h::t =>
+        b match {
+          case Nil =>
+            a.map(This[A, B](_))
+          case hh::tt =>
+            Both(h, hh) :: alignList(t, tt)
+        }
+
     }
 
+  import scalaz.std.list._
+
+  def concatThisList[A, B](x: List[A \&/ B]): List[A] =
+    concatThis[List, A, B](x)
+
+  def concatThisStream[A, B](x: EphemeralStream[A \&/ B]): EphemeralStream[A] =
+    concatThis[EphemeralStream, A, B](x)
+
+  def concatThis[F[_], A, B](x: F[A \&/ B])(implicit M: MonadPlus[F]): F[A] =
+    M.bind(x) {
+      case This(a) =>
+        M.point(a)
+      case That(_) =>
+        M.empty
+      case Both(a, _) =>
+        M.point(a)
+    }
+
+  def concatThatList[A, B](x: List[A \&/ B]): List[B] =
+    concatThat[List, A, B](x)
+
+  def concatThatStream[A, B](x: EphemeralStream[A \&/ B]): EphemeralStream[B] =
+    concatThat[EphemeralStream, A, B](x)
+
+  def concatThat[F[_], A, B](x: F[A \&/ B])(implicit M: MonadPlus[F]): F[B] =
+    M.bind(x) {
+      case This(_) =>
+        M.empty
+      case That(b) =>
+        M.point(b)
+      case Both(_, b) =>
+        M.point(b)
+    }
+
+  def unalignList[A, B](x: List[A \&/ B]): (List[A], List[B]) =
+    unalign[List, A, B](x)
+
+  def unalignStream[A, B](x: EphemeralStream[A \&/ B]): (EphemeralStream[A], EphemeralStream[B]) =
+    unalign[EphemeralStream, A, B](x)
+
+  def unalign[F[_], A, B](x: F[A \&/ B])(implicit M: MonadPlus[F]): (F[A], F[B]) =
+    (concatThis(x), concatThat(x))
 }
