@@ -25,7 +25,6 @@ trait Searchable[A] {
     new Searchable[Maybe[A]] {
       def search[B](run: Maybe[A] => Maybe[B]) =
         run(Maybe.empty) orElse Searchable.this.search(a => run(Maybe.just(a)))
-        // search (mamb . Just)
     }
 }
 
